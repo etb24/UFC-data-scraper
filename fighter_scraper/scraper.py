@@ -1,31 +1,35 @@
-import requests
 from bs4 import BeautifulSoup
 from bs4.element import Tag
-from tqdm import tqdm
+from selenium import webdriver
+from selenium.webdriver.chrome.options import Options
+from selenium.webdriver.chrome.service import Service
+import time
 
-BASE_URL = 'https://ufc.com'
+BASE_URL = 'https://www.ufc.com'
 
+def create_driver():
+    service = Service(executable_path='chromedriver.exe')  # adjust path as necessary
+    options = Options()
+    options.add_argument("--lang=en-US")
 
-def get_fighter_urls(pages=253):
-    first_url = 'https://www.ufc.com/athletes/all?gender=All&search=&page='
-    urls = [first_url + str(page) for page in range(pages)]
+    return webdriver.Chrome(service=service, options=options)
 
-    
+def get_fighter_urls(driver, pages=1):
     fighter_urls = []
-    headers = {
-    'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/115.0.0.0 Safari/537.36',
-    'Accept-Language': 'en-US,en;q=0.9',
-    'Accept': 'text/html,application/xhtml+xml,application/xml;q=0.9,image/webp,*/*;q=0.8',
-    'Connection': 'keep-alive'
-    }
-    for url in tqdm(urls, desc="Fetching fighter URLs"):
-        response = requests.get(url, headers=headers)
-        soup = BeautifulSoup(response.text, "html.parser")
-        hrefs = soup.find_all('a', class_='e-button--black')
-        for href in hrefs:
-            if isinstance(href, Tag) and href.has_attr('href'):
-                second_link = href['href']
-                fighter_url = BASE_URL + str(second_link)
-                fighter_urls.append(fighter_url)
+    base_url = 'https://www.ufc.com/athletes/all?gender=All&search=&page='
+
+    for page in range(pages):
+        driver.get(base_url + str(page))
+        time.sleep(2)
+        soup = BeautifulSoup(driver.page_source, 'html.parser')
+        links = soup.find_all('a', class_='e-button--black')
+
+        for link in links:
+            if isinstance(link, Tag):
+                href = link.get('href')
+                if isinstance(href, str) and href.startswith('/athlete/'):
+                    full_url = BASE_URL + href
+                    if full_url not in fighter_urls:
+                        fighter_urls.append(full_url)
 
     return fighter_urls

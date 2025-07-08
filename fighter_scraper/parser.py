@@ -1,16 +1,46 @@
 from bs4 import BeautifulSoup
+import time
 
 
 def safe_text(element, default='None'):
     return element.text.strip() if element else default
 
+#parse bio section for place of birth
+def extract_bio_field(soup, field_name):
+    bio_fields = soup.find_all('div', class_='c-bio__field')
+    
+    for field in bio_fields:
+        label_div = field.find('div', class_='c-bio__label')
+        value_div = field.find('div', class_='c-bio__text')
 
-def parse_fighter_data(soup):
+        if not label_div or not value_div:
+            continue
+        
+        label = label_div.text.strip().lower()
+        target = field_name.strip().lower()
+
+        if target in label:  #allows partial matches
+            return value_div.text.strip()
+    
+    return ''
+
+
+def parse_fighter_data(driver, url):
+    driver.get(url)
+    time.sleep(2)
+    soup = BeautifulSoup(driver.page_source, 'html.parser')
+    place_text = extract_bio_field(soup, 'Place of Birth')
+    parts = [p.strip() for p in place_text.split(',')]
+    country = parts[-1] if parts else 'Unknown'
+
+
     fighter = {
         'Name': safe_text(soup.find('h1', class_='hero-profile__name')),
         'Nickname': safe_text(soup.find('p', class_='hero-profile__nickname')),
         'Weight Class': safe_text(soup.find('p', class_='hero-profile__division-title')),
-        'Record': safe_text(soup.find('p', class_='hero-profile__division-body'))
+        'Record': safe_text(soup.find('p', class_='hero-profile__division-body')),
+        'Place of Birth': place_text,
+        'Country': country
     }
 
     stats = {
@@ -47,6 +77,7 @@ def parse_fighter_data(soup):
         for group in groups1:
             label = safe_text(group.find("div", class_="c-stat-compare__label")).lower()
             value = safe_text(group.find("div", class_="c-stat-compare__number"), 'N/A')
+
             if "str. landed" in label:
                 stats['Sig Strikes Per Min'] = value
             elif "taked" in label:
@@ -115,6 +146,7 @@ def parse_fighter_data(soup):
     except:
         pass
 
+
     try:
         dt_labels = [el.text.lower() for el in soup.find_all('dt', class_='c-overlap__stats-text')]
         dd_values = [el.text for el in soup.find_all('dd', class_='c-overlap__stats-value')]
@@ -132,14 +164,13 @@ def parse_fighter_data(soup):
 
     try:
         accuracy_values = [el.text.strip() for el in soup.find_all('text', class_='e-chart-circle__percent')]
-        
+
         if len(accuracy_values) >= 1:
             stats['Striking Accuracy'] = accuracy_values[0]
         if len(accuracy_values) >= 2:
             stats['Takedown Accuracy'] = accuracy_values[1]
     except:
         pass
-
 
     fighter.update(stats)
 
